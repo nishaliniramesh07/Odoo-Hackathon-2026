@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TransitOps</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          void: 'var(--c-void)',
+          panel: 'var(--c-panel)',
+          raised: 'var(--c-raised)',
+          hairline: 'var(--c-hairline)',
+          amber: { DEFAULT: 'var(--c-amber)', dim: 'var(--c-amber-dim)' },
+          ink: 'var(--c-ink)',
+          muted: 'var(--c-muted)',
+          coal: '#14181F',
+          signal: { green: '#3DDC84', red: '#F2545B', blue: '#4FA3F7', amber: '#E8A63C' }
+        },
+        fontFamily: {
+          display: ['"Barlow Condensed"', 'sans-serif'],
+          sans: ['Inter', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'monospace']
+        }
+      }
+    }
+  };
+</script>
+<script>
+  (function () {
+    try {
+      const stored = localStorage.getItem('transitops_darkMode');
+      const isDark = stored === null ? true : JSON.parse(stored);
+      document.documentElement.classList.toggle('dark', isDark);
+    } catch (e) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+<style>
+  :root {
+    --c-void: #F4F5F7;
+    --c-panel: #FFFFFF;
+    --c-raised: #EDEFF3;
+    --c-hairline: #DDE1E7;
+    --c-ink: #14181F;
+    --c-muted: #5B6472;
+    --c-amber: #C17F22;
+    --c-amber-dim: #A3690F;
+    --c-flap-a: #FFFFFF;
+    --c-flap-b: #F0F1F5;
+    --c-flap-line: rgba(20,24,31,.10);
+    --c-scrollbar: #C7CCD6;
+  }
+  html.dark {
+    --c-void: #12161C;
+    --c-panel: #1A2029;
+    --c-raised: #212836;
+    --c-hairline: #2B3341;
+    --c-ink: #ECEEF2;
+    --c-muted: #8D96A6;
+    --c-amber: #E8A63C;
+    --c-amber-dim: #B8801F;
+    --c-flap-a: #1A2029;
+    --c-flap-b: #171C24;
+    --c-flap-line: rgba(0,0,0,.35);
+    --c-scrollbar: #3A4356;
+  }
+
+  body { background: var(--c-void); font-family:'Inter',sans-serif; transition: background-color .2s ease; }
+  .display { font-family:'Barlow Condensed',sans-serif; letter-spacing:.01em; }
+  .mono { font-family:'JetBrains Mono',monospace; }
+
+  .signal-dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; box-shadow:0 0 6px currentColor; }
+  .sig-green { background:#3DDC84; color:#3DDC84; }
+  .sig-red { background:#F2545B; color:#F2545B; }
+  .sig-blue { background:#4FA3F7; color:#4FA3F7; }
+  .sig-amber { background:#E8A63C; color:#E8A63C; }
+  .sig-gray { background:#8D96A6; color:#8D96A6; }
+
+  .flap {
+    font-family:'JetBrains Mono',monospace;
+    font-weight:700;
+    background:linear-gradient(180deg, var(--c-flap-a) 0%, var(--c-flap-b) 100%);
+    border:1px solid var(--c-hairline);
+    border-radius:6px;
+    position:relative;
+  }
+  .flap::after{
+    content:"";
+    position:absolute; left:0; right:0; top:50%;
+    height:1px; background:var(--c-flap-line);
+  }
+
+  ::-webkit-scrollbar{ width:10px; height:10px; }
+  ::-webkit-scrollbar-track{ background:transparent; }
+  ::-webkit-scrollbar-thumb{ background:var(--c-scrollbar); border-radius:8px; }
+
+  #sidebar { transition: transform .25s ease, width .25s ease; }
+  .toast-enter { animation: toastIn .25s ease forwards; }
+  .toast-leave { animation: toastOut .25s ease forwards; }
+  @keyframes toastIn { from{opacity:0; transform:translateX(24px);} to{opacity:1; transform:translateX(0);} }
+  @keyframes toastOut { from{opacity:1; transform:translateX(0);} to{opacity:0; transform:translateX(24px);} }
+
+  .nav-item.active { background:var(--c-amber); color:#14181F; }
+  .nav-item.active .nav-ic { color:#14181F; }
+
+  .modal-overlay { background:rgba(10,12,16,.6); backdrop-filter: blur(2px); }
+
+  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], select, textarea {
+    outline: none;
+  }
+  input:focus, select:focus, textarea:focus, button:focus-visible {
+    box-shadow: 0 0 0 2px #E8A63C;
+  }
+
+  /* Auth page visibility — avoids Tailwind's 'hidden'+'flex' conflict */
+  .auth-page { display: flex; min-height: 100vh; align-items: center; justify-content: center; padding: 1rem; }
+  .auth-page.page-hidden { display: none !important; }
+  #app.page-hidden { display: none !important; }
+</style>
+</head>
+<body class="bg-void text-ink min-h-screen">
+
+<!-- ===================== LOGIN PAGE ===================== -->
+<div id="login-page" class="auth-page">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-2 mb-3">
+        <div class="w-9 h-1 bg-amber rounded-full"></div>
+        <span class="mono text-xs text-muted tracking-widest">DISPATCH CONSOLE</span>
+        <div class="w-9 h-1 bg-amber rounded-full"></div>
+      </div>
+      <h1 class="display text-5xl font-700 tracking-tight text-ink">TRANSIT<span class="text-amber">OPS</span></h1>
+      <p class="text-muted text-sm mt-1">Smart Transport Operations Platform</p>
+    </div>
+
+    <form id="login-form" class="bg-panel border border-hairline rounded-xl p-6 space-y-4" novalidate>
+      <div>
+        <label for="login-email" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Email</label>
+        <input id="login-email" type="email" autocomplete="username" required
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="you@transitops.com">
+      </div>
+      <div>
+        <label for="login-password" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Password</label>
+        <input id="login-password" type="password" autocomplete="current-password" required
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="••••••••">
+      </div>
+      <p id="login-error" class="hidden text-signal-red text-xs"></p>
+      <button type="submit" class="w-full bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg py-2.5 text-sm transition-colors">
+        Sign In
+      </button>
+      <p class="text-center text-xs text-muted">
+        Don't have an account?
+        <button type="button" id="go-to-signup" class="text-amber hover:underline font-medium">Create one</button>
+      </p>
+    </form>
+
+    <div class="mt-5 bg-panel/60 border border-hairline rounded-xl p-4">
+      <p class="text-xs text-muted mb-2 uppercase tracking-wide">Quick sign-in (demo)</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button data-demo="manager@transitops.com" class="demo-btn text-xs bg-raised hover:bg-hairline border border-hairline rounded-lg py-2 text-ink">Fleet Manager</button>
+        <button data-demo="driver@transitops.com" class="demo-btn text-xs bg-raised hover:bg-hairline border border-hairline rounded-lg py-2 text-ink">Driver</button>
+        <button data-demo="safety@transitops.com" class="demo-btn text-xs bg-raised hover:bg-hairline border border-hairline rounded-lg py-2 text-ink">Safety Officer</button>
+        <button data-demo="finance@transitops.com" class="demo-btn text-xs bg-raised hover:bg-hairline border border-hairline rounded-lg py-2 text-ink">Financial Analyst</button>
+      </div>
+      <p class="text-[11px] text-muted mt-2">Password for all demo accounts: <span class="mono text-ink">password</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== SIGN-UP PAGE ===================== -->
+<div id="signup-page" class="auth-page page-hidden">
+  <div class="w-full max-w-sm">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center gap-2 mb-3">
+        <div class="w-9 h-1 bg-amber rounded-full"></div>
+        <span class="mono text-xs text-muted tracking-widest">NEW OPERATOR</span>
+        <div class="w-9 h-1 bg-amber rounded-full"></div>
+      </div>
+      <h1 class="display text-5xl font-700 tracking-tight text-ink">TRANSIT<span class="text-amber">OPS</span></h1>
+      <p class="text-muted text-sm mt-1">Create your operations account</p>
+    </div>
+
+    <form id="signup-form" class="bg-panel border border-hairline rounded-xl p-6 space-y-4" novalidate>
+      <div>
+        <label for="signup-name" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Full name</label>
+        <input id="signup-name" type="text" autocomplete="name" required
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="Jordan Lee">
+      </div>
+      <div>
+        <label for="signup-email" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Email</label>
+        <input id="signup-email" type="email" autocomplete="username" required
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="you@transitops.com">
+      </div>
+      <div>
+        <label for="signup-role" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Role</label>
+        <select id="signup-role" required
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink">
+          <option value="">Select a role</option>
+          <option>Fleet Manager</option>
+          <option>Driver</option>
+          <option>Safety Officer</option>
+          <option>Financial Analyst</option>
+        </select>
+      </div>
+      <div>
+        <label for="signup-password" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Password</label>
+        <input id="signup-password" type="password" autocomplete="new-password" required minlength="4"
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="At least 4 characters">
+      </div>
+      <div>
+        <label for="signup-password-confirm" class="block text-xs uppercase tracking-wide text-muted mb-1.5">Confirm password</label>
+        <input id="signup-password-confirm" type="password" autocomplete="new-password" required minlength="4"
+          class="w-full bg-raised border border-hairline rounded-lg px-3 py-2.5 text-sm text-ink placeholder-muted"
+          placeholder="Re-enter password">
+      </div>
+      <p id="signup-error" class="hidden text-signal-red text-xs"></p>
+      <button type="button" id="create-account-btn"
+        onclick="handleSignup()"
+        class="w-full bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg py-2.5 text-sm transition-colors">
+        Create account
+      </button>
+    </form>
+    <p class="text-center text-xs text-muted mt-3">
+      Already have an account?
+      <button type="button" id="go-to-login" class="text-amber hover:underline font-medium">Sign in</button>
+    </p>
+  </div>
+</div>
+
+<!-- ===================== MAIN APP ===================== -->
+<div id="app" class="page-hidden min-h-screen">
+  <div class="flex min-h-screen">
+
+    <!-- Sidebar -->
+    <aside id="sidebar" class="fixed md:static z-40 -translate-x-full md:translate-x-0 w-64 h-full bg-panel border-r border-hairline flex flex-col">
+      <div class="px-5 py-5 border-b border-hairline flex items-center justify-between">
+        <div>
+          <h1 class="display text-2xl font-700">TRANSIT<span class="text-amber">OPS</span></h1>
+          <p class="mono text-[10px] text-muted tracking-widest">DISPATCH CONSOLE</p>
+        </div>
+        <button id="sidebar-close" class="md:hidden text-muted hover:text-ink text-xl leading-none">✕</button>
+      </div>
+
+      <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="dashboard" data-roles="Fleet Manager,Driver,Safety Officer,Financial Analyst">
+          <span class="nav-ic text-muted">▣</span> Dashboard
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="vehicles" data-roles="Fleet Manager">
+          <span class="nav-ic text-muted">▤</span> Vehicles
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="drivers" data-roles="Fleet Manager,Safety Officer">
+          <span class="nav-ic text-muted">▥</span> Drivers
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="trips" data-roles="Fleet Manager,Driver">
+          <span class="nav-ic text-muted">➜</span> Trips
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="maintenance" data-roles="Fleet Manager,Safety Officer">
+          <span class="nav-ic text-muted">✚</span> Maintenance
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="fuel" data-roles="Fleet Manager,Financial Analyst">
+          <span class="nav-ic text-muted">⛽</span> Fuel &amp; Expenses
+        </button>
+        <button class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-ink hover:bg-raised transition-colors" data-page="reports" data-roles="Fleet Manager,Financial Analyst">
+          <span class="nav-ic text-muted">▨</span> Reports
+        </button>
+      </nav>
+
+      <div class="px-3 py-4 border-t border-hairline space-y-2">
+        <button id="dark-toggle" class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm bg-raised hover:bg-hairline transition-colors">
+          <span>Dark mode</span>
+          <span id="dark-toggle-state" class="mono text-xs text-amber">ON</span>
+        </button>
+        <div class="px-3 py-2 rounded-lg bg-raised">
+          <p id="user-name" class="text-sm font-medium text-ink">—</p>
+          <p id="user-role" class="text-xs text-muted mono">—</p>
+        </div>
+        <button id="logout-btn" class="w-full text-sm text-signal-red hover:bg-raised px-3 py-2 rounded-lg transition-colors text-left">Log out</button>
+      </div>
+    </aside>
+
+    <div id="sidebar-scrim" class="hidden fixed inset-0 bg-black/50 z-30 md:hidden"></div>
+
+    <!-- Main -->
+    <div class="flex-1 flex flex-col min-w-0">
+      <header class="sticky top-0 z-20 bg-void/90 backdrop-blur border-b border-hairline px-4 md:px-8 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button id="sidebar-open" class="md:hidden text-ink text-xl leading-none">☰</button>
+          <div>
+            <h2 id="page-title" class="display text-2xl font-600 leading-none">Dashboard</h2>
+            <p class="text-xs text-muted mt-0.5">Live operational overview</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="hidden sm:inline-flex items-center mono text-xs text-muted border border-hairline rounded-full px-3 py-1">
+            <span class="signal-dot sig-green"></span> LIVE
+          </span>
+        </div>
+      </header>
+
+      <main class="flex-1 px-4 md:px-8 py-6 overflow-x-hidden">
+
+        <!-- DASHBOARD -->
+        <section id="page-dashboard" class="page-section space-y-6">
+          <div class="flex flex-wrap items-center gap-3">
+            <select id="filter-type" class="bg-panel border border-hairline rounded-lg px-3 py-2 text-sm text-ink">
+              <option value="">All Types</option>
+              <option>Truck</option><option>Van</option><option>Car</option><option>Motorcycle</option>
+            </select>
+            <select id="filter-status" class="bg-panel border border-hairline rounded-lg px-3 py-2 text-sm text-ink">
+              <option value="">All Statuses</option>
+              <option>Available</option><option>On Trip</option><option>In Shop</option><option>Retired</option>
+            </select>
+            <select id="filter-region" class="bg-panel border border-hairline rounded-lg px-3 py-2 text-sm text-ink">
+              <option value="">All Regions</option>
+              <option>North</option><option>South</option><option>East</option><option>West</option>
+            </select>
+            <button id="filter-clear" class="text-xs text-muted hover:text-ink underline">Clear filters</button>
+          </div>
+
+          <div id="kpi-grid" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+
+          <div id="dashboard-empty" class="hidden bg-panel border border-dashed border-hairline rounded-xl p-10 text-center text-muted">
+            No fleet data yet. Seed data will appear here once loaded.
+          </div>
+        </section>
+
+        <!-- VEHICLES -->
+        <section id="page-vehicles" class="page-section hidden">
+          <div class="bg-panel border border-hairline rounded-xl shadow-sm">
+            <div class="px-6 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 class="display text-lg font-600 text-ink">Vehicles Registry</h3>
+              <button id="add-vehicle-btn" onclick="openVehicleForm()" class="bg-amber hover:bg-amber-dim text-coal text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+                + Add Vehicle
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-raised/50 border-b border-hairline text-muted font-medium text-xs uppercase tracking-wider">
+                    <th class="px-6 py-3">Reg Number</th>
+                    <th class="px-6 py-3">Name</th>
+                    <th class="px-6 py-3">Type</th>
+                    <th class="px-6 py-3">Max Load Capacity</th>
+                    <th class="px-6 py-3">Odometer</th>
+                    <th class="px-6 py-3">Region</th>
+                    <th class="px-6 py-3">Status</th>
+                    <th class="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="vehicles-table-body" class="divide-y divide-hairline"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- DRIVERS -->
+        <section id="page-drivers" class="page-section hidden">
+          <div class="bg-panel border border-hairline rounded-xl shadow-sm">
+            <div class="px-6 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 class="display text-lg font-600 text-ink">Drivers Registry</h3>
+              <button id="add-driver-btn" onclick="openDriverForm()" class="bg-amber hover:bg-amber-dim text-coal text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+                + Add Driver
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-raised/50 border-b border-hairline text-muted font-medium text-xs uppercase tracking-wider">
+                    <th class="px-6 py-3">Name</th>
+                    <th class="px-6 py-3">License Number</th>
+                    <th class="px-6 py-3">Category</th>
+                    <th class="px-6 py-3">Expiry Date</th>
+                    <th class="px-6 py-3">Contact</th>
+                    <th class="px-6 py-3">Safety Score</th>
+                    <th class="px-6 py-3">Status</th>
+                    <th class="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="drivers-table-body" class="divide-y divide-hairline"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TRIPS -->
+        <section id="page-trips" class="page-section hidden">
+          <div class="bg-panel border border-hairline rounded-xl shadow-sm">
+            <div class="px-6 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 class="display text-lg font-600 text-ink">Trips &amp; Dispatch Board</h3>
+              <button id="add-trip-btn" onclick="openTripForm()" class="bg-amber hover:bg-amber-dim text-coal text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+                + New Dispatch
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-raised/50 border-b border-hairline text-muted font-medium text-xs uppercase tracking-wider">
+                    <th class="px-6 py-3">Route Reference</th>
+                    <th class="px-6 py-3">Assigned Vehicle</th>
+                    <th class="px-6 py-3">Assigned Driver</th>
+                    <th class="px-6 py-3">Cargo Load</th>
+                    <th class="px-6 py-3">Distance</th>
+                    <th class="px-6 py-3">Expected Revenue</th>
+                    <th class="px-6 py-3">Status</th>
+                    <th class="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="trips-table-body" class="divide-y divide-hairline"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- MAINTENANCE -->
+        <section id="page-maintenance" class="page-section hidden">
+          <div class="bg-panel border border-hairline rounded-xl shadow-sm">
+            <div class="px-6 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 class="display text-lg font-600 text-ink">Vehicle Maintenance Records</h3>
+              <button id="add-maint-btn" onclick="openMaintenanceForm()" class="bg-amber hover:bg-amber-dim text-coal text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+                + Create Maintenance Ticket
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-raised/50 border-b border-hairline text-muted font-medium text-xs uppercase tracking-wider">
+                    <th class="px-6 py-3">Vehicle</th>
+                    <th class="px-6 py-3">Description</th>
+                    <th class="px-6 py-3">Cost</th>
+                    <th class="px-6 py-3">Date</th>
+                    <th class="px-6 py-3">Status</th>
+                    <th class="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="maintenance-table-body" class="divide-y divide-hairline"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- FUEL -->
+        <section id="page-fuel" class="page-section hidden">
+          <div class="bg-panel border border-hairline rounded-xl shadow-sm">
+            <div class="px-6 py-4 border-b border-hairline flex items-center justify-between">
+              <h3 class="display text-lg font-600 text-ink">Fuel logs &amp; Expenses</h3>
+              <button id="add-expense-btn" onclick="openExpenseForm()" class="bg-amber hover:bg-amber-dim text-coal text-xs font-semibold px-3 py-2 rounded-lg transition-colors">
+                + Log Expense
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse">
+                <thead>
+                  <tr class="bg-raised/50 border-b border-hairline text-muted font-medium text-xs uppercase tracking-wider">
+                    <th class="px-6 py-3">Vehicle</th>
+                    <th class="px-6 py-3">Type</th>
+                    <th class="px-6 py-3">Amount</th>
+                    <th class="px-6 py-3">Liters (Fuel only)</th>
+                    <th class="px-6 py-3">Date</th>
+                    <th class="px-6 py-3">Notes</th>
+                    <th class="px-6 py-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="fuel-table-body" class="divide-y divide-hairline"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- REPORTS -->
+        <section id="page-reports" class="page-section hidden space-y-6">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-panel border border-hairline p-5 rounded-xl">
+              <span class="text-xs uppercase tracking-wider text-muted font-medium">Total Operating Revenue</span>
+              <h3 class="mono text-2xl font-bold mt-2 text-ink" id="rep-tot-rev">$0.00</h3>
+            </div>
+            <div class="bg-panel border border-hairline p-5 rounded-xl">
+              <span class="text-xs uppercase tracking-wider text-muted font-medium">Total Operating Cost</span>
+              <h3 class="mono text-2xl font-bold mt-2 text-signal-red" id="rep-tot-cost">$0.00</h3>
+            </div>
+            <div class="bg-panel border border-hairline p-5 rounded-xl">
+              <span class="text-xs uppercase tracking-wider text-muted font-medium">Net Operating Income</span>
+              <h3 class="mono text-2xl font-bold mt-2 text-signal-green" id="rep-net-inc">$0.00</h3>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-panel border border-hairline p-6 rounded-xl space-y-4">
+              <h4 class="display text-lg font-600 text-ink">Expense Cost Breakdown</h4>
+              <div class="space-y-3" id="expense-breakdown-container"></div>
+            </div>
+            <div class="bg-panel border border-hairline p-6 rounded-xl space-y-4">
+              <h4 class="display text-lg font-600 text-ink">Fuel Statistics</h4>
+              <table class="w-full text-sm">
+                <tbody>
+                  <tr class="border-b border-hairline py-2">
+                    <td class="text-muted py-2">Total Fuel Purchased</td>
+                    <td class="mono font-semibold text-ink text-right py-2" id="rep-fuel-liters">0.00 Liters</td>
+                  </tr>
+                  <tr class="border-b border-hairline py-2">
+                    <td class="text-muted py-2">Total Fuel Expenditure</td>
+                    <td class="mono font-semibold text-ink text-right py-2" id="rep-fuel-exp">$0.00</td>
+                  </tr>
+                  <tr class="border-b border-hairline py-2">
+                    <td class="text-muted py-2">Average Price per Liter</td>
+                    <td class="mono font-semibold text-ink text-right py-2" id="rep-avg-price">$0.00</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== TOAST CONTAINER ===================== -->
+<div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 w-72"></div>
+
+<!-- ===================== GENERIC MODAL TEMPLATE ===================== -->
+<div id="modal-root" class="hidden fixed inset-0 z-50 modal-overlay flex items-center justify-center px-4">
+  <div id="modal-box" class="bg-panel border border-hairline rounded-xl w-full max-w-lg p-6 max-h-[85vh] overflow-y-auto">
+    <div class="flex items-center justify-between mb-4">
+      <h3 id="modal-title" class="display text-xl">Modal Title</h3>
+      <button id="modal-close" class="text-muted hover:text-ink text-xl leading-none">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const DATA_KEYS = {
+  users: 'transitops_users',
+  vehicles: 'transitops_vehicles',
+  drivers: 'transitops_drivers',
+  trips: 'transitops_trips',
+  maintenance: 'transitops_maintenance',
+  fuelLogs: 'transitops_fuelLogs',
+  expenses: 'transitops_expenses'
+};
+const SESSION_KEY = 'transitops_currentUser';
+const DARKMODE_KEY = 'transitops_darkMode';
+
+const _memoryStorage = {};
+const storage = {
+  getItem(key) { try { return localStorage.getItem(key); } catch { return _memoryStorage[key] || null; } },
+  setItem(key, value) { try { localStorage.setItem(key, value); } catch { _memoryStorage[key] = String(value); } },
+  removeItem(key) { try { localStorage.removeItem(key); } catch { delete _memoryStorage[key]; } }
+};
+
+function getData(key) { try { return JSON.parse(storage.getItem(key)) || []; } catch { return []; } }
+function saveData(key, data) {
+  try { storage.setItem(key, JSON.stringify(data)); }
+  catch (err) { console.error('saveData failed for', key, err); showToast('Could not save data — storage may be restricted.', 'error'); }
+}
+function generateId() { return Date.now().toString(36) + Math.random().toString(36).substr(2, 5); }
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const palette = {
+    success: { border: '#3DDC84', icon: '✓', text: '#3DDC84' },
+    error:   { border: '#F2545B', icon: '✕', text: '#F2545B' },
+    warning: { border: '#E8A63C', icon: '!', text: '#E8A63C' },
+    info:    { border: '#4FA3F7', icon: 'i', text: '#4FA3F7' }
+  };
+  const p = palette[type] || palette.info;
+  const toast = document.createElement('div');
+  toast.className = 'toast-enter bg-panel border rounded-lg px-4 py-3 flex items-start gap-3 shadow-lg';
+  toast.style.borderColor = p.border;
+  toast.innerHTML = `<span class="mono text-sm font-bold" style="color:${p.text}">${p.icon}</span><span class="text-sm text-ink flex-1">${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => { toast.classList.remove('toast-enter'); toast.classList.add('toast-leave'); setTimeout(() => toast.remove(), 250); }, 3000);
+}
+function escapeHtml(str) { const div = document.createElement('div'); div.textContent = str; return div.innerHTML; }
+
+function getCurrentUser() { try { return JSON.parse(storage.getItem(SESSION_KEY)); } catch { return null; } }
+function setCurrentUser(user) { storage.setItem(SESSION_KEY, JSON.stringify(user)); }
+function clearCurrentUser() { storage.removeItem(SESSION_KEY); }
+function hasRole(role) { const user = getCurrentUser(); return !!(user && user.role === role); }
+
+function showPage(pageName) {
+  document.querySelectorAll('.page-section').forEach(sec => sec.classList.add('hidden'));
+  const target = document.getElementById('page-' + pageName);
+  if (target) target.classList.remove('hidden');
+  document.querySelectorAll('.nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.page === pageName));
+  const titles = { dashboard:'Dashboard', vehicles:'Vehicles', drivers:'Drivers', trips:'Trips', maintenance:'Maintenance', fuel:'Fuel & Expenses', reports:'Reports' };
+  const titleEl = document.getElementById('page-title');
+  if (titleEl) titleEl.textContent = titles[pageName] || pageName;
+  closeSidebar();
+  if (pageName === 'dashboard') updateDashboard();
+  else if (pageName === 'vehicles') renderVehicles();
+  else if (pageName === 'drivers') renderDrivers();
+  else if (pageName === 'trips') renderTrips();
+  else if (pageName === 'maintenance') renderMaintenance();
+  else if (pageName === 'fuel') renderExpenses();
+  else if (pageName === 'reports') renderReports();
+}
+
+function openModal(titleOrId, bodyHtml) {
+  const root = document.getElementById('modal-root');
+  if (bodyHtml !== undefined) {
+    document.getElementById('modal-title').textContent = titleOrId;
+    document.getElementById('modal-body').innerHTML = bodyHtml;
+  }
+  root.classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal-root').classList.add('hidden');
+  document.getElementById('modal-body').innerHTML = '';
+}
+document.getElementById('modal-close').addEventListener('click', closeModal);
+document.getElementById('modal-root').addEventListener('click', (e) => { if (e.target.id === 'modal-root') closeModal(); });
+
+function openSidebar() {
+  document.getElementById('sidebar').classList.remove('-translate-x-full');
+  document.getElementById('sidebar-scrim').classList.remove('hidden');
+}
+function closeSidebar() {
+  if (window.innerWidth < 768) {
+    document.getElementById('sidebar').classList.add('-translate-x-full');
+    document.getElementById('sidebar-scrim').classList.add('hidden');
+  }
+}
+document.getElementById('sidebar-open').addEventListener('click', openSidebar);
+document.getElementById('sidebar-close').addEventListener('click', closeSidebar);
+document.getElementById('sidebar-scrim').addEventListener('click', closeSidebar);
+
+function applyDarkMode(isDark) {
+  document.documentElement.classList.toggle('dark', isDark);
+  document.getElementById('dark-toggle-state').textContent = isDark ? 'ON' : 'OFF';
+  storage.setItem(DARKMODE_KEY, JSON.stringify(isDark));
+}
+function initDarkMode() {
+  let isDark = true;
+  try { const stored = storage.getItem(DARKMODE_KEY); isDark = stored === null ? true : JSON.parse(stored); } catch { isDark = true; }
+  applyDarkMode(isDark);
+}
+document.getElementById('dark-toggle').addEventListener('click', () => { applyDarkMode(!document.documentElement.classList.contains('dark')); });
+
+function seedIfEmpty() {
+  if (getData(DATA_KEYS.users).length === 0) {
+    saveData(DATA_KEYS.users, [
+      { id: '1', name: 'Manager', email: 'manager@transitops.com', password: 'password', role: 'Fleet Manager' },
+      { id: '2', name: 'Driver',  email: 'driver@transitops.com',  password: 'password', role: 'Driver' },
+      { id: '3', name: 'Safety',  email: 'safety@transitops.com',  password: 'password', role: 'Safety Officer' },
+      { id: '4', name: 'Finance', email: 'finance@transitops.com', password: 'password', role: 'Financial Analyst' }
+    ]);
+  }
+  if (getData(DATA_KEYS.vehicles).length === 0) {
+    saveData(DATA_KEYS.vehicles, [
+      { id: 'v1', registrationNumber: 'KA-01-1234', name: 'Tata Ace',     type: 'Truck', maxLoadCapacity: 500, odometer: 15000, acquisitionCost: 250000, status: 'Available', region: 'South' },
+      { id: 'v2', registrationNumber: 'KA-02-5678', name: 'Maruti Van',   type: 'Van',   maxLoadCapacity: 300, odometer: 20000, acquisitionCost: 150000, status: 'Available', region: 'West' },
+      { id: 'v3', registrationNumber: 'KA-03-9012', name: 'Ford Transit', type: 'Truck', maxLoadCapacity: 800, odometer: 10000, acquisitionCost: 350000, status: 'On Trip',   region: 'North' }
+    ]);
+  }
+  if (getData(DATA_KEYS.drivers).length === 0) {
+    saveData(DATA_KEYS.drivers, [
+      { id: 'd1', name: 'Raj Kumar',    licenseNumber: 'DL123456', licenseCategory: 'B', licenseExpiryDate: '2027-12-31', contactNumber: '9876543210', safetyScore: 85, status: 'Available' },
+      { id: 'd2', name: 'Priya Sharma', licenseNumber: 'DL789012', licenseCategory: 'C', licenseExpiryDate: '2026-06-30', contactNumber: '8765432109', safetyScore: 92, status: 'Available' },
+      { id: 'd3', name: 'Amit Singh',   licenseNumber: 'DL345678', licenseCategory: 'A', licenseExpiryDate: '2025-12-31', contactNumber: '7654321098', safetyScore: 78, status: 'On Trip' }
+    ]);
+  }
+  if (getData(DATA_KEYS.trips).length === 0) {
+    saveData(DATA_KEYS.trips, [
+      { id: 't1', source: 'Mumbai', destination: 'Pune',   vehicleId: 'v1', driverId: 'd1', cargoWeight: 450, plannedDistance: 150, status: 'Dispatched', revenue: 2500, createdAt: '2026-07-12T10:00:00' },
+      { id: 't2', source: 'Delhi',  destination: 'Jaipur', vehicleId: 'v2', driverId: 'd2', cargoWeight: 250, plannedDistance: 280, status: 'Draft',      revenue: 0,    createdAt: '2026-07-12T11:00:00' }
+    ]);
+  }
+  if (getData(DATA_KEYS.maintenance).length === 0) {
+    saveData(DATA_KEYS.maintenance, [
+      { id: 'm1', vehicleId: 'v1', description: 'Tire replacement & balancing',         cost: 450.0, date: '2026-07-01', status: 'Completed' },
+      { id: 'm2', vehicleId: 'v2', description: 'AC compressor check & repair',          cost: 600.0, date: '2026-06-15', status: 'Completed' },
+      { id: 'm3', vehicleId: 'v3', description: 'Regular engine tuning & oil service',   cost: 350.0, date: '2026-07-12', status: 'Scheduled' }
+    ]);
+    const vehs = getData(DATA_KEYS.vehicles);
+    const v3 = vehs.find(x => x.id === 'v3');
+    if (v3) { v3.status = 'In Shop'; saveData(DATA_KEYS.vehicles, vehs); }
+  }
+  if (getData(DATA_KEYS.expenses).length === 0) {
+    saveData(DATA_KEYS.expenses, [
+      { id: 'e1', vehicleId: 'v1', expense_type: 'fuel',   amount: 75.0,  liters: 40.0,  date: '2026-07-12', notes: 'Fuel fill-up Scranton' },
+      { id: 'e2', vehicleId: 'v2', expense_type: 'fuel',   amount: 110.0, liters: 62.0,  date: '2026-07-11', notes: 'Fuel fill-up NJ Turnpike' },
+      { id: 'e3', vehicleId: 'v3', expense_type: 'fuel',   amount: 250.0, liters: 140.0, date: '2026-07-09', notes: 'Diesel refill' },
+      { id: 'e4', vehicleId: 'v1', expense_type: 'repair', amount: 150.0, liters: 0.0,   date: '2026-07-05', notes: 'Wiper replacement' },
+      { id: 'e5', vehicleId: 'v2', expense_type: 'other',  amount: 45.0,  liters: 0.0,   date: '2026-07-10', notes: 'Tolls and cleaning' }
+    ]);
+  }
+}
+
+/* ---------- Auth flow ---------- */
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.classList.add('hidden');
+  const users = getData(DATA_KEYS.users);
+  const match = users.find(u => u.email.toLowerCase() === email && u.password === password);
+  if (!match) {
+    errEl.textContent = 'Invalid email or password. Please try again.';
+    errEl.classList.remove('hidden');
+    showToast('Login failed: invalid credentials.', 'error');
+    return;
+  }
+  setCurrentUser(match);
+  showToast(`Welcome back, ${match.name}.`, 'success');
+  enterApp(match);
+});
+
+document.querySelectorAll('.demo-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('login-email').value = btn.dataset.demo;
+    document.getElementById('login-password').value = 'password';
+    const form = document.getElementById('login-form');
+    if (typeof form.requestSubmit === 'function') { form.requestSubmit(); }
+    else { form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true })); }
+  });
+});
+
+/* ---------- Login / sign-up page switching ---------- */
+function showLoginPage() {
+  document.getElementById('signup-page').classList.add('page-hidden');
+  document.getElementById('login-page').classList.remove('page-hidden');
+  document.getElementById('signup-error').classList.add('hidden');
+  document.getElementById('signup-form').reset();
+}
+function showSignupPage() {
+  document.getElementById('login-page').classList.add('page-hidden');
+  document.getElementById('signup-page').classList.remove('page-hidden');
+  document.getElementById('login-error').classList.add('hidden');
+  document.getElementById('signup-form').reset();
+}
+document.getElementById('go-to-signup').addEventListener('click', showSignupPage);
+document.getElementById('go-to-login').addEventListener('click', showLoginPage);
+
+/* ---------- Sign-up flow ---------- */
+function handleSignup() {
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim().toLowerCase();
+  const role = document.getElementById('signup-role').value;
+  const password = document.getElementById('signup-password').value;
+  const confirmPassword = document.getElementById('signup-password-confirm').value;
+  const errEl = document.getElementById('signup-error');
+  errEl.classList.add('hidden');
+  const showErr = (msg) => { errEl.textContent = msg; errEl.classList.remove('hidden'); showToast(msg, 'error'); };
+  if (!name || !email || !role || !password || !confirmPassword) { showErr('Please fill in every field.'); return; }
+  if (!/^\S+@\S+\.\S+$/.test(email)) { showErr('Please enter a valid email address.'); return; }
+  if (password.length < 4) { showErr('Password must be at least 4 characters.'); return; }
+  if (password !== confirmPassword) { showErr('Passwords do not match.'); return; }
+  const users = getData(DATA_KEYS.users);
+  if (users.some(u => u.email.toLowerCase() === email)) { showErr('An account with this email already exists.'); return; }
+  const newUser = { id: generateId(), name, email, password, role };
+  users.push(newUser);
+  saveData(DATA_KEYS.users, users);
+  setCurrentUser(newUser);
+  showToast(`Account created — welcome, ${newUser.name}.`, 'success');
+  enterApp(newUser);
+}
+
+document.getElementById('signup-form').addEventListener('submit', (e) => { e.preventDefault(); handleSignup(); });
+
+document.getElementById('logout-btn').addEventListener('click', () => {
+  clearCurrentUser();
+  showToast('You have been logged out.', 'info');
+  document.getElementById('app').classList.add('page-hidden');
+  showLoginPage();
+});
+
+function enterApp(user) {
+  document.getElementById('login-page').classList.add('page-hidden');
+  document.getElementById('signup-page').classList.add('page-hidden');
+  document.getElementById('app').classList.remove('page-hidden');
+  document.getElementById('user-name').textContent = user.name;
+  document.getElementById('user-role').textContent = user.role;
+  applyRoleVisibility(user.role);
+  showPage('dashboard');
+}
+
+function applyRoleVisibility(role) {
+  let firstVisible = null;
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    const allowed = btn.dataset.roles.split(',');
+    const canSee = allowed.includes(role);
+    btn.classList.toggle('hidden', !canSee);
+    if (canSee && !firstVisible) firstVisible = btn.dataset.page;
+  });
+  window.__firstVisiblePage = firstVisible || 'dashboard';
+}
+
+document.querySelectorAll('.nav-item').forEach(btn => { btn.addEventListener('click', () => showPage(btn.dataset.page)); });
+
+/* ---------- Dashboard KPIs ---------- */
+function updateDashboard() {
+  const vehicles = getData(DATA_KEYS.vehicles);
+  const drivers = getData(DATA_KEYS.drivers);
+  const trips = getData(DATA_KEYS.trips);
+  const typeFilter = document.getElementById('filter-type').value;
+  const statusFilter = document.getElementById('filter-status').value;
+  const regionFilter = document.getElementById('filter-region').value;
+  const filteredVehicles = vehicles.filter(v => (!typeFilter || v.type === typeFilter) && (!statusFilter || v.status === statusFilter) && (!regionFilter || v.region === regionFilter));
+  const emptyState = document.getElementById('dashboard-empty');
+  const grid = document.getElementById('kpi-grid');
+  if (vehicles.length === 0 && drivers.length === 0 && trips.length === 0) { emptyState.classList.remove('hidden'); grid.innerHTML = ''; return; }
+  emptyState.classList.add('hidden');
+  const activeVehicles = filteredVehicles.filter(v => v.status === 'On Trip').length;
+  const availableVehicles = filteredVehicles.filter(v => v.status === 'Available').length;
+  const inMaintenance = filteredVehicles.filter(v => v.status === 'In Shop').length;
+  const activeTrips = trips.filter(t => t.status === 'Dispatched').length;
+  const pendingTrips = trips.filter(t => t.status === 'Draft').length;
+  const driversOnDuty = drivers.filter(d => d.status === 'On Trip').length;
+  const totalVehicles = filteredVehicles.length;
+  const fleetUtilization = totalVehicles > 0 ? Math.round((activeVehicles / totalVehicles) * 100) : 0;
+  const kpis = [
+    { label: 'Active Vehicles',          value: activeVehicles,     unit: 'on trip',   color: 'sig-blue' },
+    { label: 'Available Vehicles',        value: availableVehicles,  unit: 'ready',     color: 'sig-green' },
+    { label: 'Vehicles in Maintenance',   value: inMaintenance,      unit: 'in shop',   color: 'sig-amber' },
+    { label: 'Active Trips',              value: activeTrips,        unit: 'dispatched',color: 'sig-blue' },
+    { label: 'Pending Trips',             value: pendingTrips,       unit: 'draft',     color: 'sig-gray' },
+    { label: 'Drivers On Duty',           value: driversOnDuty,      unit: 'on trip',   color: 'sig-blue' },
+    { label: 'Fleet Utilization',         value: fleetUtilization,   unit: '%',         color: 'sig-amber', isPct: true }
+  ];
+  grid.innerHTML = kpis.map(k => `
+    <div class="flap p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="signal-dot ${k.color}"></span>
+        <span class="mono text-[10px] text-muted uppercase tracking-widest">${k.unit}</span>
+      </div>
+      <div class="mono text-4xl font-700 text-ink leading-none">${k.value}${k.isPct ? '<span class="text-lg text-muted">%</span>' : ''}</div>
+      <div class="display text-sm text-muted mt-2 tracking-wide">${k.label}</div>
+    </div>
+  `).join('');
+}
+
+['filter-type', 'filter-status', 'filter-region'].forEach(id => { document.getElementById(id).addEventListener('change', updateDashboard); });
+document.getElementById('filter-clear').addEventListener('click', () => {
+  document.getElementById('filter-type').value = '';
+  document.getElementById('filter-status').value = '';
+  document.getElementById('filter-region').value = '';
+  updateDashboard();
+});
+
+/* ---------- List Renders ---------- */
+function renderVehicles() {
+  const tableBody = document.getElementById('vehicles-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  const list = getData(DATA_KEYS.vehicles);
+  const user = getCurrentUser();
+  const isManager = user && user.role === 'Fleet Manager';
+  const addBtn = document.getElementById('add-vehicle-btn');
+  if (addBtn) addBtn.style.display = isManager ? 'block' : 'none';
+  list.forEach(v => {
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-raised/40 transition-colors text-ink';
+    let sigColor = 'sig-gray';
+    if (v.status === 'Available') sigColor = 'sig-green';
+    else if (v.status === 'On Trip') sigColor = 'sig-blue';
+    else if (v.status === 'In Shop') sigColor = 'sig-amber';
+    let actionsHtml = '';
+    if (isManager) {
+      actionsHtml += `<button onclick="openVehicleForm('${v.id}')" class="text-amber hover:underline text-xs mr-3">Edit</button>`;
+      if (v.status === 'Available') actionsHtml += `<button onclick="sendToMaintenance('${v.id}')" class="text-signal-amber hover:underline text-xs">Send to Shop</button>`;
+    } else { actionsHtml = `<span class="text-xs text-muted">Read Only</span>`; }
+    row.innerHTML = `
+      <td class="px-6 py-3.5 mono text-xs font-semibold">${escapeHtml(v.registrationNumber)}</td>
+      <td class="px-6 py-3.5 font-medium">${escapeHtml(v.name)}</td>
+      <td class="px-6 py-3.5"><span class="mono text-xs bg-raised border border-hairline rounded px-2 py-0.5">${escapeHtml(v.type)}</span></td>
+      <td class="px-6 py-3.5 mono">${escapeHtml(v.maxLoadCapacity)} kg</td>
+      <td class="px-6 py-3.5 mono">${escapeHtml(v.odometer)} km</td>
+      <td class="px-6 py-3.5 text-muted">${escapeHtml(v.region)}</td>
+      <td class="px-6 py-3.5"><span class="inline-flex items-center text-xs font-semibold"><span class="signal-dot ${sigColor}"></span> ${escapeHtml(v.status)}</span></td>
+      <td class="px-6 py-3.5 text-right">${actionsHtml}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function renderDrivers() {
+  const tableBody = document.getElementById('drivers-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  const list = getData(DATA_KEYS.drivers);
+  const user = getCurrentUser();
+  const isManager = user && user.role === 'Fleet Manager';
+  const isSafety = user && user.role === 'Safety Officer';
+  const canModify = isManager || isSafety;
+  const addBtn = document.getElementById('add-driver-btn');
+  if (addBtn) addBtn.style.display = canModify ? 'block' : 'none';
+  list.forEach(d => {
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-raised/40 transition-colors text-ink';
+    let sigColor = 'sig-gray';
+    if (d.status === 'Available') sigColor = 'sig-green';
+    else if (d.status === 'On Trip') sigColor = 'sig-blue';
+    else if (d.status === 'Suspended') sigColor = 'sig-red';
+    let scoreColor = 'text-signal-green';
+    if (d.safetyScore < 70) scoreColor = 'text-signal-red';
+    else if (d.safetyScore < 85) scoreColor = 'text-signal-amber';
+    const actionsHtml = canModify
+      ? `<button onclick="openDriverForm('${d.id}')" class="text-amber hover:underline text-xs">Edit</button>`
+      : `<span class="text-xs text-muted">Read Only</span>`;
+    row.innerHTML = `
+      <td class="px-6 py-3.5 font-semibold">${escapeHtml(d.name)}</td>
+      <td class="px-6 py-3.5 mono text-xs">${escapeHtml(d.licenseNumber)}</td>
+      <td class="px-6 py-3.5"><span class="mono text-xs bg-raised border border-hairline rounded px-2 py-0.5">${escapeHtml(d.licenseCategory)}</span></td>
+      <td class="px-6 py-3.5 mono text-muted">${escapeHtml(d.licenseExpiryDate)}</td>
+      <td class="px-6 py-3.5 mono">${escapeHtml(d.contactNumber)}</td>
+      <td class="px-6 py-3.5 mono font-semibold ${scoreColor}">${escapeHtml(d.safetyScore)}/100</td>
+      <td class="px-6 py-3.5"><span class="inline-flex items-center text-xs font-semibold"><span class="signal-dot ${sigColor}"></span> ${escapeHtml(d.status)}</span></td>
+      <td class="px-6 py-3.5 text-right">${actionsHtml}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function renderTrips() {
+  const tableBody = document.getElementById('trips-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  const list = getData(DATA_KEYS.trips);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const user = getCurrentUser();
+  const isManager = user && user.role === 'Fleet Manager';
+  const isDriver = user && user.role === 'Driver';
+  const addBtn = document.getElementById('add-trip-btn');
+  if (addBtn) addBtn.style.display = isManager ? 'block' : 'none';
+  list.forEach(t => {
+    const v = vehiclesList.find(x => x.id === t.vehicleId);
+    const d = driversList.find(x => x.id === t.driverId);
+    if (isDriver && d && d.name !== user.name) return;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-raised/40 transition-colors text-ink';
+    let sigColor = 'sig-gray';
+    if (t.status === 'Dispatched') sigColor = 'sig-blue';
+    else if (t.status === 'Completed') sigColor = 'sig-green';
+    else if (t.status === 'Cancelled') sigColor = 'sig-red';
+    let actionsHtml = '';
+    if (t.status === 'Dispatched' || t.status === 'Completed') {
+      actionsHtml += `<button onclick="printTripManifest('${t.id}')" class="text-signal-blue hover:underline text-xs mr-3">Manifest</button>`;
+    }
+    if (isManager || isDriver) {
+      if (t.status === 'Draft' && isManager) {
+        actionsHtml += `<button onclick="startTrip('${t.id}')" class="text-signal-green hover:underline text-xs mr-3">Start</button>`;
+        actionsHtml += `<button onclick="cancelTrip('${t.id}')" class="text-signal-red hover:underline text-xs mr-3">Cancel</button>`;
+        actionsHtml += `<button onclick="openTripForm('${t.id}')" class="text-amber hover:underline text-xs">Edit</button>`;
+      } else if (t.status === 'Draft' && isDriver && d && d.name === user.name) {
+        actionsHtml += `<button onclick="startTrip('${t.id}')" class="text-signal-green hover:underline text-xs">Start</button>`;
+      } else if (t.status === 'Dispatched' && (isManager || (isDriver && d && d.name === user.name))) {
+        actionsHtml += `<button onclick="completeTripPrompt('${t.id}')" class="text-signal-green hover:underline text-xs mr-3">Complete</button>`;
+        if (isManager) actionsHtml += `<button onclick="cancelTrip('${t.id}')" class="text-signal-red hover:underline text-xs">Cancel</button>`;
+      }
+    }
+    if (!actionsHtml) actionsHtml = `<span class="text-xs text-muted">None</span>`;
+    row.innerHTML = `
+      <td class="px-6 py-3.5 font-semibold">${escapeHtml(t.source)} → ${escapeHtml(t.destination)}</td>
+      <td class="px-6 py-3.5 text-sm">${v ? escapeHtml(v.name) + ' (' + escapeHtml(v.registrationNumber) + ')' : '<span class="text-signal-red">None</span>'}</td>
+      <td class="px-6 py-3.5 text-sm">${d ? escapeHtml(d.name) : '<span class="text-signal-red">None</span>'}</td>
+      <td class="px-6 py-3.5 mono">${escapeHtml(t.cargoWeight)} kg</td>
+      <td class="px-6 py-3.5 mono">${escapeHtml(t.plannedDistance)} km</td>
+      <td class="px-6 py-3.5 mono font-semibold text-signal-green">$${parseFloat(t.revenue || 0).toFixed(2)}</td>
+      <td class="px-6 py-3.5"><span class="inline-flex items-center text-xs font-semibold"><span class="signal-dot ${sigColor}"></span> ${escapeHtml(t.status)}</span></td>
+      <td class="px-6 py-3.5 text-right">${actionsHtml}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function renderMaintenance() {
+  const tableBody = document.getElementById('maintenance-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  const list = getData(DATA_KEYS.maintenance);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const user = getCurrentUser();
+  const canModify = user && (user.role === 'Fleet Manager' || user.role === 'Safety Officer');
+  const addBtn = document.getElementById('add-maint-btn');
+  if (addBtn) addBtn.style.display = canModify ? 'block' : 'none';
+  list.forEach(m => {
+    const v = vehiclesList.find(x => x.id === m.vehicleId);
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-raised/40 transition-colors text-ink';
+    let sigColor = m.status === 'Scheduled' ? 'sig-amber' : 'sig-green';
+    let actionsHtml = '';
+    if (canModify) {
+      if (m.status === 'Scheduled') actionsHtml += `<button onclick="completeMaintenance('${m.id}')" class="text-signal-green hover:underline text-xs mr-3">Mark Done</button>`;
+      actionsHtml += `<button onclick="openMaintenanceForm('${m.id}')" class="text-amber hover:underline text-xs">Edit</button>`;
+    } else { actionsHtml = `<span class="text-xs text-muted">Read Only</span>`; }
+    row.innerHTML = `
+      <td class="px-6 py-3.5 font-semibold">${v ? escapeHtml(v.name) + ' (' + escapeHtml(v.registrationNumber) + ')' : '<span class="text-signal-red">None</span>'}</td>
+      <td class="px-6 py-3.5 text-sm">${escapeHtml(m.description)}</td>
+      <td class="px-6 py-3.5 mono font-semibold text-signal-red">$${parseFloat(m.cost || 0).toFixed(2)}</td>
+      <td class="px-6 py-3.5 mono text-muted">${escapeHtml(m.date)}</td>
+      <td class="px-6 py-3.5"><span class="inline-flex items-center text-xs font-semibold"><span class="signal-dot ${sigColor}"></span> ${escapeHtml(m.status)}</span></td>
+      <td class="px-6 py-3.5 text-right">${actionsHtml}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function renderExpenses() {
+  const tableBody = document.getElementById('fuel-table-body');
+  if (!tableBody) return;
+  tableBody.innerHTML = '';
+  const list = getData(DATA_KEYS.expenses);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const user = getCurrentUser();
+  const canModify = user && (user.role === 'Fleet Manager' || user.role === 'Financial Analyst');
+  const addBtn = document.getElementById('add-expense-btn');
+  if (addBtn) addBtn.style.display = canModify ? 'block' : 'none';
+  list.forEach(e => {
+    const v = vehiclesList.find(x => x.id === e.vehicleId);
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-raised/40 transition-colors text-ink';
+    let badgeColor = 'bg-raised text-ink border border-hairline';
+    if (e.expense_type === 'fuel') badgeColor = 'bg-signal-blue/10 text-signal-blue border border-signal-blue/20';
+    else if (e.expense_type === 'repair') badgeColor = 'bg-signal-red/10 text-signal-red border border-signal-red/20';
+    else if (e.expense_type === 'other') badgeColor = 'bg-signal-amber/10 text-signal-amber border border-signal-amber/20';
+    const actionsHtml = canModify ? `<button onclick="openExpenseForm('${e.id}')" class="text-amber hover:underline text-xs">Edit</button>` : `<span class="text-xs text-muted">Read Only</span>`;
+    row.innerHTML = `
+      <td class="px-6 py-3.5 font-semibold">${v ? escapeHtml(v.name) + ' (' + escapeHtml(v.registrationNumber) + ')' : '<span class="text-signal-red">None</span>'}</td>
+      <td class="px-6 py-3.5"><span class="mono text-xs rounded px-2.5 py-1 font-medium capitalize ${badgeColor}">${escapeHtml(e.expense_type)}</span></td>
+      <td class="px-6 py-3.5 mono font-semibold text-signal-red">$${parseFloat(e.amount || 0).toFixed(2)}</td>
+      <td class="px-6 py-3.5 mono">${e.expense_type === 'fuel' ? parseFloat(e.liters || 0).toFixed(1) + ' L' : '—'}</td>
+      <td class="px-6 py-3.5 mono text-muted">${escapeHtml(e.date)}</td>
+      <td class="px-6 py-3.5 text-muted text-sm">${escapeHtml(e.notes)}</td>
+      <td class="px-6 py-3.5 text-right">${actionsHtml}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+function renderReports() {
+  const tripsList = getData(DATA_KEYS.trips);
+  const expensesList = getData(DATA_KEYS.expenses);
+  const maintList = getData(DATA_KEYS.maintenance);
+  const totRev = tripsList.filter(t => t.status === 'Completed').reduce((sum, t) => sum + parseFloat(t.revenue || 0), 0);
+  const expCost = expensesList.reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
+  const maintCost = maintList.filter(m => m.status === 'Completed').reduce((sum, m) => sum + parseFloat(m.cost || 0), 0);
+  const totCost = expCost + maintCost;
+  const netInc = totRev - totCost;
+  document.getElementById('rep-tot-rev').innerText = `$${totRev.toFixed(2)}`;
+  document.getElementById('rep-tot-cost').innerText = `$${totCost.toFixed(2)}`;
+  document.getElementById('rep-net-inc').innerText = `$${netInc.toFixed(2)}`;
+  const netEl = document.getElementById('rep-net-inc');
+  netEl.className = `mono text-2xl font-bold mt-2 ${netInc < 0 ? 'text-signal-red' : 'text-signal-green'}`;
+  let fuelTotal = expensesList.filter(e => e.expense_type === 'fuel').reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
+  let repairTotal = expensesList.filter(e => e.expense_type === 'repair').reduce((sum, e) => sum + parseFloat(e.amount || 0), 0) + maintCost;
+  let otherTotal = expensesList.filter(e => e.expense_type === 'other').reduce((sum, e) => sum + parseFloat(e.amount || 0), 0);
+  let overall = fuelTotal + repairTotal + otherTotal;
+  const getPct = (part) => overall > 0 ? Math.round((part / overall) * 100) : 0;
+  const bContainer = document.getElementById('expense-breakdown-container');
+  if (bContainer) {
+    bContainer.innerHTML = `
+      <div class="space-y-1"><div class="flex justify-between text-sm text-ink"><span>Fuel Expenditures</span><span class="mono font-semibold">$${fuelTotal.toFixed(2)} (${getPct(fuelTotal)}%)</span></div><div class="w-full bg-raised rounded-full h-2.5 overflow-hidden"><div class="bg-signal-blue h-full" style="width:${getPct(fuelTotal)}%"></div></div></div>
+      <div class="space-y-1 mt-3"><div class="flex justify-between text-sm text-ink"><span>Maintenance &amp; Repairs</span><span class="mono font-semibold">$${repairTotal.toFixed(2)} (${getPct(repairTotal)}%)</span></div><div class="w-full bg-raised rounded-full h-2.5 overflow-hidden"><div class="bg-signal-red h-full" style="width:${getPct(repairTotal)}%"></div></div></div>
+      <div class="space-y-1 mt-3"><div class="flex justify-between text-sm text-ink"><span>Other Operations Costs</span><span class="mono font-semibold">$${otherTotal.toFixed(2)} (${getPct(otherTotal)}%)</span></div><div class="w-full bg-raised rounded-full h-2.5 overflow-hidden"><div class="bg-signal-amber h-full" style="width:${getPct(otherTotal)}%"></div></div></div>
+    `;
+  }
+  const fuelLiters = expensesList.filter(e => e.expense_type === 'fuel').reduce((sum, e) => sum + parseFloat(e.liters || 0), 0);
+  document.getElementById('rep-fuel-liters').innerText = `${fuelLiters.toFixed(1)} Liters`;
+  document.getElementById('rep-fuel-exp').innerText = `$${fuelTotal.toFixed(2)}`;
+  document.getElementById('rep-avg-price').innerText = `$${(fuelLiters > 0 ? fuelTotal / fuelLiters : 0).toFixed(2)}`;
+}
+
+/* ---------- Modal Forms ---------- */
+function openVehicleForm(id) {
+  const isEdit = id !== undefined;
+  const list = getData(DATA_KEYS.vehicles);
+  const item = isEdit ? list.find(v => v.id === id) : { id: generateId(), registrationNumber: '', name: '', type: 'Truck', maxLoadCapacity: 500, odometer: 0, acquisitionCost: 100000, status: 'Available', region: 'North' };
+  const title = isEdit ? "Edit Vehicle Details" : "Register New Vehicle";
+  const bodyHtml = `
+    <form id="vehicle-form" class="space-y-4" onsubmit="event.preventDefault(); saveVehicle('${item.id}', ${isEdit})">
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Registration Number</label><input type="text" id="v-reg" required value="${escapeHtml(item.registrationNumber)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. KA-01-1234"></div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Vehicle Name</label><input type="text" id="v-name" required value="${escapeHtml(item.name)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. Tata Ace Super"></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Type</label><select id="v-type" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.type==='Truck'?'selected':''}>Truck</option><option ${item.type==='Van'?'selected':''}>Van</option><option ${item.type==='Car'?'selected':''}>Car</option><option ${item.type==='Motorcycle'?'selected':''}>Motorcycle</option></select></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Region</label><select id="v-region" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.region==='North'?'selected':''}>North</option><option ${item.region==='South'?'selected':''}>South</option><option ${item.region==='East'?'selected':''}>East</option><option ${item.region==='West'?'selected':''}>West</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Max Load Capacity (kg)</label><input type="number" id="v-load" required value="${item.maxLoadCapacity}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Odometer (km)</label><input type="number" id="v-odom" required value="${item.odometer}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Acquisition Cost ($)</label><input type="number" id="v-cost" required value="${item.acquisitionCost}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Status</label><select id="v-status" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.status==='Available'?'selected':''}>Available</option><option ${item.status==='On Trip'?'selected':''}>On Trip</option><option ${item.status==='In Shop'?'selected':''}>In Shop</option><option ${item.status==='Retired'?'selected':''}>Retired</option></select></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-hairline">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 border border-hairline rounded-lg text-sm text-ink bg-raised hover:bg-hairline">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg text-sm transition-colors">Save</button>
+      </div>
+    </form>
+  `;
+  openModal(title, bodyHtml);
+}
+
+function saveVehicle(id, isEdit) {
+  const list = getData(DATA_KEYS.vehicles);
+  const obj = { id, registrationNumber: document.getElementById('v-reg').value.trim(), name: document.getElementById('v-name').value.trim(), type: document.getElementById('v-type').value, region: document.getElementById('v-region').value, maxLoadCapacity: parseInt(document.getElementById('v-load').value)||0, odometer: parseInt(document.getElementById('v-odom').value)||0, acquisitionCost: parseInt(document.getElementById('v-cost').value)||0, status: document.getElementById('v-status').value };
+  if (isEdit) { const idx = list.findIndex(v => v.id === id); if (idx !== -1) list[idx] = obj; } else { list.push(obj); }
+  saveData(DATA_KEYS.vehicles, list); closeModal(); showToast("Vehicle record saved successfully.", "success"); renderVehicles(); updateDashboard();
+}
+
+function openDriverForm(id) {
+  const isEdit = id !== undefined;
+  const list = getData(DATA_KEYS.drivers);
+  const item = isEdit ? list.find(d => d.id === id) : { id: generateId(), name: '', licenseNumber: '', licenseCategory: 'C', licenseExpiryDate: new Date(Date.now()+365*24*60*60*1000).toISOString().split('T')[0], contactNumber: '', safetyScore: 90, status: 'Available' };
+  const title = isEdit ? "Edit Driver Profile" : "Register New Driver";
+  const bodyHtml = `
+    <form id="driver-form" class="space-y-4" onsubmit="event.preventDefault(); saveDriver('${item.id}', ${isEdit})">
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Driver Name</label><input type="text" id="d-name" required value="${escapeHtml(item.name)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. John Doe"></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">License Number</label><input type="text" id="d-lic" required value="${escapeHtml(item.licenseNumber)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. DL123456"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">License Category</label><select id="d-cat" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.licenseCategory==='A'?'selected':''}>A</option><option ${item.licenseCategory==='B'?'selected':''}>B</option><option ${item.licenseCategory==='C'?'selected':''}>C</option><option ${item.licenseCategory==='D'?'selected':''}>D</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">License Expiry Date</label><input type="date" id="d-exp" required value="${item.licenseExpiryDate}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Contact Number</label><input type="text" id="d-phone" required value="${escapeHtml(item.contactNumber)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. 9876543210"></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Safety Score (0-100)</label><input type="number" id="d-score" min="0" max="100" required value="${item.safetyScore}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Status</label><select id="d-status" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.status==='Available'?'selected':''}>Available</option><option ${item.status==='On Trip'?'selected':''}>On Trip</option><option ${item.status==='Suspended'?'selected':''}>Suspended</option></select></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-hairline">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 border border-hairline rounded-lg text-sm text-ink bg-raised hover:bg-hairline">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg text-sm transition-colors">Save Driver</button>
+      </div>
+    </form>
+  `;
+  openModal(title, bodyHtml);
+}
+
+function saveDriver(id, isEdit) {
+  const list = getData(DATA_KEYS.drivers);
+  const obj = { id, name: document.getElementById('d-name').value.trim(), licenseNumber: document.getElementById('d-lic').value.trim(), licenseCategory: document.getElementById('d-cat').value, licenseExpiryDate: document.getElementById('d-exp').value, contactNumber: document.getElementById('d-phone').value.trim(), safetyScore: parseInt(document.getElementById('d-score').value)||0, status: document.getElementById('d-status').value };
+  if (isEdit) { const idx = list.findIndex(d => d.id === id); if (idx !== -1) list[idx] = obj; } else { list.push(obj); }
+  saveData(DATA_KEYS.drivers, list); closeModal(); showToast("Driver record saved successfully.", "success"); renderDrivers(); updateDashboard();
+}
+
+function openTripForm(id) {
+  const isEdit = id !== undefined;
+  const list = getData(DATA_KEYS.trips);
+  const item = isEdit ? list.find(t => t.id === id) : { id: generateId(), source: '', destination: '', vehicleId: '', driverId: '', cargoWeight: 0, plannedDistance: 0, status: 'Draft', revenue: 0 };
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const vehicleOptions = vehiclesList.map(v => { const sel = v.id===item.vehicleId?'selected':''; const dis = (v.status!=='Available'&&v.id!==item.vehicleId)?'disabled':''; return `<option value="${v.id}" ${sel} ${dis}>${escapeHtml(v.name)} (${escapeHtml(v.registrationNumber)}) [Cap: ${v.maxLoadCapacity}kg] - ${v.status}</option>`; }).join('');
+  const driverOptions = driversList.map(d => { const sel = d.id===item.driverId?'selected':''; const dis = (d.status!=='Available'&&d.id!==item.driverId)?'disabled':''; return `<option value="${d.id}" ${sel} ${dis}>${escapeHtml(d.name)} [Safety: ${d.safetyScore}] - ${d.status}</option>`; }).join('');
+  const title = isEdit ? "Edit Dispatch Record" : "New Trip Dispatch";
+  const bodyHtml = `
+    <form id="trip-form" class="space-y-4" onsubmit="event.preventDefault(); saveTrip('${item.id}', ${isEdit})">
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Source (Origin)</label><input type="text" id="t-src" required value="${escapeHtml(item.source)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. Mumbai"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Destination</label><input type="text" id="t-dest" required value="${escapeHtml(item.destination)}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" placeholder="e.g. Pune"></div>
+      </div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Assigned Vehicle</label><select id="t-veh" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option value="">-- Select Available Vehicle --</option>${vehicleOptions}</select></div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Assigned Driver</label><select id="t-drv" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option value="">-- Select Available Driver --</option>${driverOptions}</select></div>
+      <div class="grid grid-cols-3 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Cargo Load (kg)</label><input type="number" id="t-weight" required value="${item.cargoWeight}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Distance (km)</label><input type="number" id="t-dist" required value="${item.plannedDistance}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Revenue ($)</label><input type="number" id="t-rev" required value="${item.revenue}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-hairline">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 border border-hairline rounded-lg text-sm text-ink bg-raised hover:bg-hairline">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg text-sm transition-colors">Save Dispatch</button>
+      </div>
+    </form>
+  `;
+  openModal(title, bodyHtml);
+}
+
+function saveTrip(id, isEdit) {
+  const list = getData(DATA_KEYS.trips);
+  const src = document.getElementById('t-src').value.trim();
+  const dest = document.getElementById('t-dest').value.trim();
+  const vehicleId = document.getElementById('t-veh').value;
+  const driverId = document.getElementById('t-drv').value;
+  const weight = parseInt(document.getElementById('t-weight').value)||0;
+  const dist = parseInt(document.getElementById('t-dist').value)||0;
+  const rev = parseInt(document.getElementById('t-rev').value)||0;
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const v = vehiclesList.find(x => x.id === vehicleId);
+  if (v && weight > v.maxLoadCapacity) { showToast(`ValidationError: Cargo load (${weight}kg) exceeds max capacity (${v.maxLoadCapacity}kg)!`, "error"); return; }
+  if (isEdit) { const idx = list.findIndex(t => t.id === id); if (idx !== -1) list[idx] = { ...list[idx], source: src, destination: dest, vehicleId, driverId, cargoWeight: weight, plannedDistance: dist, revenue: rev }; }
+  else { list.push({ id, source: src, destination: dest, vehicleId, driverId, cargoWeight: weight, plannedDistance: dist, status: 'Draft', revenue: rev, createdAt: new Date().toISOString() }); }
+  saveData(DATA_KEYS.trips, list); closeModal(); showToast("Dispatch record saved successfully.", "success"); renderTrips(); updateDashboard();
+}
+
+function openMaintenanceForm(id) {
+  const isEdit = id !== undefined;
+  const list = getData(DATA_KEYS.maintenance);
+  const item = isEdit ? list.find(m => m.id === id) : { id: generateId(), vehicleId: '', description: '', cost: 0.0, date: new Date().toISOString().split('T')[0], status: 'Scheduled' };
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const vehicleOptions = vehiclesList.map(v => `<option value="${v.id}" ${v.id===item.vehicleId?'selected':''}>${escapeHtml(v.name)} (${escapeHtml(v.registrationNumber)})</option>`).join('');
+  const title = isEdit ? "Edit Maintenance Ticket" : "New Maintenance Record";
+  const bodyHtml = `
+    <form id="maint-form" class="space-y-4" onsubmit="event.preventDefault(); saveMaintenance('${item.id}', ${isEdit})">
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Select Vehicle</label><select id="m-veh" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option value="">-- Select Vehicle --</option>${vehicleOptions}</select></div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Description</label><textarea id="m-desc" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" rows="3">${escapeHtml(item.description)}</textarea></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Cost ($)</label><input type="number" step="0.01" id="m-cost" required value="${item.cost}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Date Scheduled</label><input type="date" id="m-date" required value="${item.date}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+      </div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Ticket Status</label><select id="m-status" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option ${item.status==='Scheduled'?'selected':''}>Scheduled</option><option ${item.status==='Completed'?'selected':''}>Completed</option></select></div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-hairline">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 border border-hairline rounded-lg text-sm text-ink bg-raised hover:bg-hairline">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg text-sm transition-colors">Save Ticket</button>
+      </div>
+    </form>
+  `;
+  openModal(title, bodyHtml);
+}
+
+function saveMaintenance(id, isEdit) {
+  const list = getData(DATA_KEYS.maintenance);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const vehicleId = document.getElementById('m-veh').value;
+  const desc = document.getElementById('m-desc').value.trim();
+  const cost = parseFloat(document.getElementById('m-cost').value)||0;
+  const date = document.getElementById('m-date').value;
+  const status = document.getElementById('m-status').value;
+  if (isEdit) {
+    const idx = list.findIndex(m => m.id === id);
+    if (idx !== -1) {
+      const oldM = list[idx];
+      list[idx] = { id, vehicleId, description: desc, cost, date, status };
+      const v = vehiclesList.find(x => x.id === vehicleId);
+      if (v) {
+        if (status === 'Completed' && oldM.status === 'Scheduled') v.status = 'Available';
+        else if (status === 'Scheduled' && oldM.status === 'Completed') v.status = 'In Shop';
+      }
+    }
+  } else {
+    list.push({ id, vehicleId, description: desc, cost, date, status });
+    const v = vehiclesList.find(x => x.id === vehicleId);
+    if (v && status === 'Scheduled') v.status = 'In Shop';
+  }
+  saveData(DATA_KEYS.maintenance, list); saveData(DATA_KEYS.vehicles, vehiclesList);
+  closeModal(); showToast("Maintenance ticket saved successfully.", "success"); renderMaintenance(); updateDashboard();
+}
+
+function openExpenseForm(id) {
+  const isEdit = id !== undefined;
+  const list = getData(DATA_KEYS.expenses);
+  const item = isEdit ? list.find(e => e.id === id) : { id: generateId(), vehicleId: '', expense_type: 'fuel', amount: 0.0, liters: 0.0, date: new Date().toISOString().split('T')[0], notes: '' };
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const vehicleOptions = vehiclesList.map(v => `<option value="${v.id}" ${v.id===item.vehicleId?'selected':''}>${escapeHtml(v.name)} (${escapeHtml(v.registrationNumber)})</option>`).join('');
+  const title = isEdit ? "Edit Expense Log" : "Log New Fleet Expense";
+  const bodyHtml = `
+    <form id="expense-form" class="space-y-4" onsubmit="event.preventDefault(); saveExpense('${item.id}', ${isEdit})">
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Select Vehicle</label><select id="e-veh" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"><option value="">-- Select Vehicle --</option>${vehicleOptions}</select></div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Expense Type</label><select id="e-type" required class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" onchange="toggleLitersField(this.value)"><option value="fuel" ${item.expense_type==='fuel'?'selected':''}>Fuel</option><option value="repair" ${item.expense_type==='repair'?'selected':''}>Repair</option><option value="other" ${item.expense_type==='other'?'selected':''}>Other</option></select></div>
+      <div class="grid grid-cols-2 gap-4">
+        <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Amount ($)</label><input type="number" step="0.01" id="e-amount" required value="${item.amount}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+        <div id="e-liters-container" style="display:${item.expense_type==='fuel'?'block':'none'}"><label class="block text-xs uppercase tracking-wide text-muted mb-1">Liters Purchased</label><input type="number" step="0.1" id="e-liters" value="${item.liters}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+      </div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Date Logged</label><input type="date" id="e-date" required value="${item.date}" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink"></div>
+      <div><label class="block text-xs uppercase tracking-wide text-muted mb-1">Additional Notes</label><textarea id="e-notes" class="w-full bg-raised border border-hairline rounded-lg px-3 py-2 text-sm text-ink" rows="2">${escapeHtml(item.notes)}</textarea></div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-hairline">
+        <button type="button" onclick="closeModal()" class="px-4 py-2 border border-hairline rounded-lg text-sm text-ink bg-raised hover:bg-hairline">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-amber hover:bg-amber-dim text-coal font-semibold rounded-lg text-sm transition-colors">Save Expense</button>
+      </div>
+    </form>
+  `;
+  openModal(title, bodyHtml);
+}
+
+function saveExpense(id, isEdit) {
+  const list = getData(DATA_KEYS.expenses);
+  const vehicleId = document.getElementById('e-veh').value;
+  const type = document.getElementById('e-type').value;
+  const amt = parseFloat(document.getElementById('e-amount').value)||0;
+  const date = document.getElementById('e-date').value;
+  const notes = document.getElementById('e-notes').value.trim();
+  let ltr = 0;
+  if (type === 'fuel') {
+    ltr = parseFloat(document.getElementById('e-liters').value)||0;
+    if (ltr <= 0) { showToast("ValidationError: Liters must be > 0 for fuel expenses!", "error"); return; }
+  }
+  if (isEdit) { const idx = list.findIndex(e => e.id === id); if (idx !== -1) list[idx] = { id, vehicleId, expense_type: type, amount: amt, liters: ltr, date, notes }; }
+  else { list.push({ id, vehicleId, expense_type: type, amount: amt, liters: ltr, date, notes }); }
+  saveData(DATA_KEYS.expenses, list); closeModal(); showToast("Expense logged successfully.", "success"); renderExpenses(); updateDashboard();
+}
+
+function toggleLitersField(typeVal) {
+  const el = document.getElementById('e-liters-container');
+  if (el) el.style.display = typeVal === 'fuel' ? 'block' : 'none';
+}
+
+/* ---------- Workflow State Transitions ---------- */
+function startTrip(id) {
+  const tripsList = getData(DATA_KEYS.trips);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const t = tripsList.find(x => x.id === id); if (!t) return;
+  const v = vehiclesList.find(x => x.id === t.vehicleId);
+  const d = driversList.find(x => x.id === t.driverId);
+  if (v && v.status !== 'Available') { showToast(`ValidationError: Vehicle '${v.name}' is not available!`, "error"); return; }
+  if (d && d.status !== 'Available') { showToast(`ValidationError: Driver '${d.name}' is not available!`, "error"); return; }
+  t.status = 'Dispatched'; if (v) v.status = 'On Trip'; if (d) d.status = 'On Trip';
+  saveData(DATA_KEYS.trips, tripsList); saveData(DATA_KEYS.vehicles, vehiclesList); saveData(DATA_KEYS.drivers, driversList);
+  showToast(`Trip ${t.source} → ${t.destination} started!`, "success"); renderTrips(); updateDashboard();
+}
+
+function completeTripPrompt(tripId) {
+  const tripsList = getData(DATA_KEYS.trips);
+  const t = tripsList.find(x => x.id === tripId); if (!t) return;
+  const dist = prompt("Confirm distance travelled (km) to update odometer:", t.plannedDistance);
+  if (dist === null) return;
+  const numericDist = parseFloat(dist);
+  if (isNaN(numericDist) || numericDist < 0) { showToast("Invalid distance entered.", "error"); return; }
+  completeTrip(tripId, numericDist);
+}
+
+function completeTrip(id, customDistance) {
+  const tripsList = getData(DATA_KEYS.trips);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const t = tripsList.find(x => x.id === id); if (!t) return;
+  const v = vehiclesList.find(x => x.id === t.vehicleId);
+  const d = driversList.find(x => x.id === t.driverId);
+  t.status = 'Completed';
+  if (v) { v.status = 'Available'; v.odometer += customDistance; }
+  if (d) d.status = 'Available';
+  saveData(DATA_KEYS.trips, tripsList); saveData(DATA_KEYS.vehicles, vehiclesList); saveData(DATA_KEYS.drivers, driversList);
+  showToast(`Trip ${t.source} → ${t.destination} completed. Odometer +${customDistance}km!`, "success"); renderTrips(); updateDashboard();
+}
+
+function cancelTrip(id) {
+  const tripsList = getData(DATA_KEYS.trips);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const t = tripsList.find(x => x.id === id); if (!t) return;
+  const v = vehiclesList.find(x => x.id === t.vehicleId);
+  const d = driversList.find(x => x.id === t.driverId);
+  t.status = 'Cancelled';
+  if (v && v.status === 'On Trip') v.status = 'Available';
+  if (d && d.status === 'On Trip') d.status = 'Available';
+  saveData(DATA_KEYS.trips, tripsList); saveData(DATA_KEYS.vehicles, vehiclesList); saveData(DATA_KEYS.drivers, driversList);
+  showToast(`Trip ${t.source} → ${t.destination} cancelled.`, "info"); renderTrips(); updateDashboard();
+}
+
+function sendToMaintenance(vehicleId) {
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const maintList = getData(DATA_KEYS.maintenance);
+  const v = vehiclesList.find(x => x.id === vehicleId); if (!v) return;
+  v.status = 'In Shop';
+  maintList.push({ id: generateId(), vehicleId: v.id, description: `Periodic inspection & repair for ${v.name}`, cost: 150.00, date: new Date().toISOString().split('T')[0], status: 'Scheduled' });
+  saveData(DATA_KEYS.vehicles, vehiclesList); saveData(DATA_KEYS.maintenance, maintList);
+  showToast(`Vehicle '${v.name}' sent to shop. Ticket created!`, "success"); renderVehicles(); updateDashboard();
+}
+
+function completeMaintenance(id) {
+  const maintList = getData(DATA_KEYS.maintenance);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const m = maintList.find(x => x.id === id); if (!m) return;
+  const v = vehiclesList.find(x => x.id === m.vehicleId);
+  m.status = 'Completed'; if (v) v.status = 'Available';
+  saveData(DATA_KEYS.maintenance, maintList); saveData(DATA_KEYS.vehicles, vehiclesList);
+  showToast(`Maintenance complete. Vehicle '${v ? v.name : ''}' back in service!`, "success"); renderMaintenance(); updateDashboard();
+}
+
+function printTripManifest(tripId) {
+  const tripsList = getData(DATA_KEYS.trips);
+  const vehiclesList = getData(DATA_KEYS.vehicles);
+  const driversList = getData(DATA_KEYS.drivers);
+  const t = tripsList.find(x => x.id === tripId); if (!t) return;
+  const v = vehiclesList.find(x => x.id === t.vehicleId);
+  const d = driversList.find(x => x.id === t.driverId);
+  const printWindow = window.open('', '_blank');
+  const statusColor = t.status === 'Dispatched' ? '#3DDC84' : t.status === 'Completed' ? '#4FA3F7' : '#8D96A6';
+  printWindow.document.write(`
+    <html><head><title>Trip Manifest - ${t.source} to ${t.destination}</title>
+    <style>
+      body{font-family:sans-serif;padding:40px;color:#14181F;line-height:1.6;background:#F4F5F7}
+      .container{max-width:800px;margin:0 auto;background:#fff;border:1px solid #DDE1E7;padding:40px;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,.05)}
+      .manifest-header{border-bottom:3px solid #E8A63C;padding-bottom:20px;margin-bottom:30px;display:flex;justify-content:space-between;align-items:flex-end}
+      .title{font-size:28px;font-weight:bold;margin:0;text-transform:uppercase;letter-spacing:1px}
+      .status{font-size:13px;font-weight:bold;background:${statusColor};color:#fff;padding:4px 12px;border-radius:99px;text-transform:uppercase;display:inline-block}
+      .section-title{font-size:15px;font-weight:bold;color:#C17F22;border-bottom:1px solid #DDE1E7;padding-bottom:6px;margin-top:30px;margin-bottom:15px;text-transform:uppercase}
+      .grid{display:flex;gap:40px} .col{flex:1}
+      table{width:100%;border-collapse:collapse} table td{padding:8px 0;font-size:14px;vertical-align:top}
+      table td.label{color:#5B6472;width:40%} table td.val{font-weight:600}
+      .footer-signs{margin-top:80px;display:flex;justify-content:space-between;padding-top:40px;border-top:1px dashed #DDE1E7}
+      .sign-box{text-align:center;width:250px} .line{border-top:1px solid #14181F;margin-bottom:8px;width:100%}
+      .sign-label{font-size:12px;color:#5B6472;text-transform:uppercase}
+      @media print{body{padding:0;background:none}.container{border:none;box-shadow:none;padding:0}button{display:none}}
+    </style></head><body>
+    <div style="text-align:right;margin-bottom:20px;max-width:800px;margin-left:auto;margin-right:auto">
+      <button onclick="window.print()" style="background:#E8A63C;color:#14181F;border:none;padding:10px 20px;font-size:14px;font-weight:bold;border-radius:6px;cursor:pointer">Print Manifest</button>
+    </div>
+    <div class="container">
+      <div class="manifest-header">
+        <div><h1 class="title">TransitOps Manifest</h1><div style="color:#5B6472;font-size:13px;margin-top:4px">Smart Dispatch Console</div></div>
+        <div style="text-align:right"><div style="font-size:14px;font-weight:bold">Trip Ref: ${t.id}</div><div class="status" style="margin-top:5px">${t.status}</div></div>
+      </div>
+      <div class="grid">
+        <div class="col"><div class="section-title">Route &amp; Cargo</div><table>
+          <tr><td class="label">Origin:</td><td class="val">${escapeHtml(t.source)}</td></tr>
+          <tr><td class="label">Destination:</td><td class="val">${escapeHtml(t.destination)}</td></tr>
+          <tr><td class="label">Cargo Weight:</td><td class="val">${escapeHtml(t.cargoWeight)} kg</td></tr>
+          <tr><td class="label">Expected Rev:</td><td class="val">$${parseFloat(t.revenue||0).toFixed(2)}</td></tr>
+        </table></div>
+        <div class="col"><div class="section-title">Timeline &amp; Logs</div><table>
+          <tr><td class="label">Planned Dist:</td><td class="val">${escapeHtml(t.plannedDistance)} km</td></tr>
+          <tr><td class="label">Created At:</td><td class="val">${t.createdAt?t.createdAt.split('T')[0]:new Date().toISOString().split('T')[0]}</td></tr>
+        </table></div>
+      </div>
+      <div class="grid" style="margin-top:20px">
+        <div class="col"><div class="section-title">Assigned Vehicle</div><table>
+          <tr><td class="label">Vehicle Name:</td><td class="val">${v?escapeHtml(v.name):'N/A'}</td></tr>
+          <tr><td class="label">Reg Number:</td><td class="val">${v?escapeHtml(v.registrationNumber):'N/A'}</td></tr>
+          <tr><td class="label">Type:</td><td class="val">${v?escapeHtml(v.type):'N/A'}</td></tr>
+          <tr><td class="label">Max Capacity:</td><td class="val">${v?escapeHtml(v.maxLoadCapacity)+' kg':'N/A'}</td></tr>
+        </table></div>
+        <div class="col"><div class="section-title">Assigned Driver</div><table>
+          <tr><td class="label">Driver Name:</td><td class="val">${d?escapeHtml(d.name):'N/A'}</td></tr>
+          <tr><td class="label">License No:</td><td class="val">${d?escapeHtml(d.licenseNumber):'N/A'}</td></tr>
+          <tr><td class="label">Contact No:</td><td class="val">${d?escapeHtml(d.contactNumber):'N/A'}</td></tr>
+          <tr><td class="label">Safety Score:</td><td class="val">${d?escapeHtml(d.safetyScore)+'/100':'N/A'}</td></tr>
+        </table></div>
+      </div>
+      <div class="footer-signs">
+        <div class="sign-box"><div class="line"></div><div class="sign-label">Authorized Operations Officer</div></div>
+        <div class="sign-box"><div class="line"></div><div class="sign-label">Driver Signature (Acknowledgement)</div></div>
+      </div>
+    </div></body></html>
+  `);
+  printWindow.document.close();
+}
+
+/* ---------- Init ---------- */
+function init() {
+  seedIfEmpty();
+  initDarkMode();
+  const existing = getCurrentUser();
+  if (existing) enterApp(existing);
+}
+init();
+
+/* ---------- Expose globals ---------- */
+window.getData = getData; window.saveData = saveData; window.generateId = generateId;
+window.showToast = showToast; window.getCurrentUser = getCurrentUser; window.hasRole = hasRole;
+window.showPage = showPage; window.openModal = openModal; window.closeModal = closeModal;
+window.updateDashboard = updateDashboard; window.DATA_KEYS = DATA_KEYS;
+window.renderVehicles = renderVehicles; window.renderDrivers = renderDrivers;
+window.renderTrips = renderTrips; window.renderMaintenance = renderMaintenance;
+window.renderExpenses = renderExpenses; window.renderReports = renderReports;
+window.openVehicleForm = openVehicleForm; window.saveVehicle = saveVehicle;
+window.openDriverForm = openDriverForm; window.saveDriver = saveDriver;
+window.openTripForm = openTripForm; window.saveTrip = saveTrip;
+window.openMaintenanceForm = openMaintenanceForm; window.saveMaintenance = saveMaintenance;
+window.openExpenseForm = openExpenseForm; window.saveExpense = saveExpense;
+window.startTrip = startTrip; window.completeTripPrompt = completeTripPrompt;
+window.completeTrip = completeTrip; window.cancelTrip = cancelTrip;
+window.sendToMaintenance = sendToMaintenance; window.completeMaintenance = completeMaintenance;
+window.printTripManifest = printTripManifest; window.toggleLitersField = toggleLitersField;
+window.handleSignup = handleSignup;
+</script>
+</body>
+</html>
